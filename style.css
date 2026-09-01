@@ -197,30 +197,64 @@
   .week-nav .week-label { font-family: 'Fredoka'; font-weight: 600; font-size: 15px; text-align: center; flex: 1; }
   .week-nav button { background: var(--surface); border: 1px solid var(--line); border-radius: 9px; width: 34px; height: 34px; font-size: 15px; color: var(--ink); }
 
-  .day-group { display: flex; flex-direction: column; gap: 8px; }
-  .day-heading { display: flex; align-items: baseline; gap: 8px; padding: 2px 2px; }
-  .day-heading .dname { font-family: 'Fredoka'; font-weight: 600; font-size: 14.5px; }
-  .day-heading .today-chip {
-    background: var(--grad); color: white; font-size: 10.5px; font-weight: 700; letter-spacing: .03em;
-    padding: 2px 8px; border-radius: 99px; text-transform: uppercase;
-  }
+  .day-group { display: flex; flex-direction: column; gap: 10px; }
 
-  .class-card {
-    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 13px 14px;
-    display: flex; align-items: center; gap: 12px; box-shadow: var(--shadow);
+  /* ---------- day strip (calendario cliente) ---------- */
+  .day-strip-wrap { display: flex; flex-direction: column; gap: 10px; }
+  .day-strip-head { display: flex; align-items: center; justify-content: center; gap: 14px; }
+  .day-strip-head .ds-nav {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 9px; width: 30px; height: 30px;
+    font-size: 15px; color: var(--ink);
   }
-  .class-time { font-family: 'Fredoka'; font-weight: 600; font-size: 15px; min-width: 50px; }
-  .class-time span { display: block; font-family: 'Manrope'; font-weight: 700; font-size: 10.5px; color: var(--ink-faint); }
-  .class-main { flex: 1; min-width: 0; }
-  .class-name { font-weight: 800; font-size: 14.5px; }
-  .class-meta { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
-  .class-meta .dot { margin: 0 5px; }
+  .day-strip-head .ds-nav:disabled { opacity: .35; }
+  .ds-month {
+    font-family: 'Fredoka'; font-weight: 600; font-size: 12.5px; letter-spacing: .04em;
+    background: var(--surface-2); color: var(--ink-soft); padding: 5px 14px; border-radius: 99px;
+  }
+  .day-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+  .ds-day {
+    flex: 1; min-width: 40px; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 8px 4px; border-radius: 12px; background: transparent; border: 1px solid transparent;
+  }
+  .ds-wd { font-size: 11px; font-weight: 700; color: var(--ink-faint); text-transform: lowercase; }
+  .ds-num { font-family: 'Fredoka'; font-weight: 600; font-size: 15.5px; color: var(--ink); }
+  .ds-day.is-today .ds-wd, .ds-day.is-today .ds-num { color: var(--magenta); }
+  .ds-day.selected { background: var(--grad); border-color: transparent; }
+  .ds-day.selected .ds-wd, .ds-day.selected .ds-num { color: white; }
+
+  /* ---------- slot rows (lezioni del giorno) ---------- */
+  .slot-row {
+    background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--magenta);
+    border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; box-shadow: var(--shadow);
+  }
+  .slot-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .slot-info { min-width: 0; }
+  .slot-time { font-family: 'Fredoka'; font-weight: 600; font-size: 15.5px; color: var(--ink-faint); }
+  .slot-name { font-weight: 800; font-size: 15px; margin-top: 1px; }
+  .slot-side { flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
+  .slot-count {
+    width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--line);
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; color: var(--ink-soft);
+  }
+  .slot-btn {
+    width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 17px; font-weight: 700; border: none;
+  }
+  .slot-btn-plus { background: var(--grad); color: white; }
+  .slot-btn-plus:disabled { opacity: .4; }
+  .slot-btn-done { background: var(--good-bg); color: var(--good); }
+  .slot-btn-disabled { background: var(--surface-2); color: var(--ink-faint); }
+
+  .slot-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--ink-soft); }
   .spots-full { color: var(--crit); font-weight: 700; }
   .spots-low { color: var(--warn); font-weight: 700; }
-  .class-action { flex-shrink: 0; }
-  .class-action .btn { white-space: nowrap; }
-  .booked-tag { display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
-  .booked-tag .yes { color: var(--good); font-weight: 700; font-size: 12.5px; display:flex; align-items:center; gap:4px; }
+  .slot-tag {
+    font-size: 11px; font-weight: 700; letter-spacing: .02em; padding: 3px 10px; border-radius: 99px; white-space: nowrap;
+  }
+  .tag-incluso { background: var(--good-bg); color: var(--good); }
+  .tag-prenotato { background: var(--good-bg); color: var(--good); }
+  .tag-completo { background: var(--crit-bg); color: var(--crit); }
+  .tag-passata { background: var(--surface-2); color: var(--ink-faint); }
 
   .empty-note { color: var(--ink-faint); font-size: 13px; padding: 6px 2px; }
 
