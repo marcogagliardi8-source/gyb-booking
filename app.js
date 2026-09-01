@@ -96,6 +96,7 @@
     clientChecking: false,
     clientTab: "calendario",
     weekOffset: 0,
+    selectedDate: null,
     scheduleCache: {},
     scheduleLoading: false,
     scheduleError: "",
@@ -367,9 +368,56 @@
     return nav;
   }
 
+  function renderDayStrip(monday, days, todayIso){
+    var wrap = el('<div class="day-strip-wrap"></div>');
+    var monthLabel = MONTH_NAMES[monday.getMonth()].toUpperCase();
+    var head = el(
+      '<div class="day-strip-head">'+
+        '<button class="ds-nav" id="ds-prev" '+(state.weekOffset<=-1?"disabled":"")+'>‹</button>'+
+        '<span class="ds-month">'+esc(monthLabel)+'</span>'+
+        '<button class="ds-nav" id="ds-next" '+(state.weekOffset>=3?"disabled":"")+'>›</button>'+
+      '</div>'
+    );
+    head.querySelector("#ds-prev").addEventListener("click", function(){
+      if(state.weekOffset>-1){ state.weekOffset--; state.scheduleError=""; state.selectedDate=null; render(); }
+    });
+    head.querySelector("#ds-next").addEventListener("click", function(){
+      if(state.weekOffset<3){ state.weekOffset++; state.scheduleError=""; state.selectedDate=null; render(); }
+    });
+    wrap.appendChild(head);
+
+    var strip = el('<div class="day-strip"></div>');
+    days.forEach(function(d){
+      var iso = toISODate(d);
+      var isSel = iso===state.selectedDate;
+      var isToday = iso===todayIso;
+      var item = el(
+        '<button type="button" class="ds-day'+(isSel?" selected":"")+(isToday?" is-today":"")+'">'+
+          '<span class="ds-wd">'+DAY_NAMES_SHORT[(d.getDay()+6)%7].toLowerCase()+'</span>'+
+          '<span class="ds-num">'+d.getDate()+'</span>'+
+        '</button>'
+      );
+      item.addEventListener("click", function(){ state.selectedDate = iso; render(); });
+      strip.appendChild(item);
+    });
+    wrap.appendChild(strip);
+    return wrap;
+  }
+
   function renderClientCalendar(client){
     var wrap = el('<div style="display:flex;flex-direction:column;gap:14px"></div>');
-    wrap.appendChild(renderWeekNav(function(){return state.weekOffset;}, function(v){state.weekOffset=v; state.scheduleError="";}));
+
+    var days = weekDates(state.weekOffset);
+    var todayIso = todayISO();
+    var monday = days[0];
+
+    var inWeek = days.some(function(d){ return toISODate(d)===state.selectedDate; });
+    if(!state.selectedDate || !inWeek){
+      var todayInWeek = days.some(function(d){ return toISODate(d)===todayIso; });
+      state.selectedDate = todayInWeek ? todayIso : toISODate(days[0]);
+    }
+
+    wrap.appendChild(renderDayStrip(monday, days, todayIso));
 
     var wstart = weekStartISO(state.weekOffset);
     var rows = state.scheduleCache[wstart];
@@ -387,25 +435,16 @@
     }
     rows = rows || [];
 
-    var days = weekDates(state.weekOffset);
-    var todayIso = todayISO();
-    days.forEach(function(d, idx){
-      var iso = toISODate(d);
-      var dayRows = rows.filter(function(r){ return r.the_date===iso; }).sort(function(a,b){ return a.time.localeCompare(b.time); });
-      var group = el('<div class="day-group"></div>');
-      group.appendChild(el(
-        '<div class="day-heading"><span class="dname">'+esc(fmtDayLabel(d))+'</span>'+
-        (iso===todayIso ? '<span class="today-chip">Oggi</span>' : '')+
-        '</div>'
-      ));
-      if(dayRows.length===0){
-        group.appendChild(el('<div class="empty-note">Nessuna mini-class in programma.</div>'));
-      }
-      dayRows.forEach(function(row){
-        group.appendChild(renderClientClassCard(row, iso, client, iso<todayIso));
-      });
-      wrap.appendChild(group);
+    var iso = state.selectedDate;
+    var dayRows = rows.filter(function(r){ return r.the_date===iso; }).sort(function(a,b){ return a.time.localeCompare(b.time); });
+    var list = el('<div class="day-group"></div>');
+    if(dayRows.length===0){
+      list.appendChild(el('<div class="empty-note">Nessuna mini-class in programma questo giorno.</div>'));
+    }
+    dayRows.forEach(function(row){
+      list.appendChild(renderClientClassCard(row, iso, client, iso<todayIso));
     });
+    wrap.appendChild(list);
     return wrap;
   }
 
@@ -423,36 +462,52 @@
 
   function renderClientClassCard(row, iso, client, isPast){
     var full = row.booked_count >= row.capacity;
-    var spotsLeft = row.capacity - row.booked_count;
-    var card = el('<div class="class-card"></div>');
-    card.appendChild(el('<div class="class-time">'+row.time+'<span>'+DAY_NAMES_SHORT[row.day]+'</span></div>'));
+    var spotsLeft = Math.max(0, row.capacity - row.booked_count);
     var spotsClass = full ? "spots-full" : (spotsLeft<=2 ? "spots-low" : "");
-    card.appendChild(el(
-      '<div class="class-main"><div class="class-name">'+esc(ACTIVITY_SHORT)+'</div>'+
-      '<div class="class-meta"><span class="'+spotsClass+'">'+
-        (full ? "Al completo" : spotsLeft+" post"+(spotsLeft===1?"o":"i")+" liber"+(spotsLeft===1?"o":"i")+" su "+row.capacity)+
-      '</span></div></div>'
+    var timeLabel = String(row.time).replace(":", ".");
+
+    var card = el('<div class="slot-row"></div>');
+
+    var top = el('<div class="slot-top"></div>');
+    top.appendChild(el(
+      '<div class="slot-info"><div class="slot-time">'+esc(timeLabel)+'</div>'+
+      '<div class="slot-name">'+esc(ACTIVITY_SHORT).toUpperCase()+'</div></div>'
     ));
 
-    var action = el('<div class="class-action"></div>');
+    var side = el('<div class="slot-side"></div>');
+    side.appendChild(el('<div class="slot-count" title="Prenotati">'+row.booked_count+'</div>'));
+
     if(isPast){
-      action.appendChild(el('<span class="hint">Passata</span>'));
+      side.appendChild(el('<div class="slot-btn slot-btn-disabled">–</div>'));
     } else if(row.is_mine){
-      var tag = el('<div class="booked-tag"><span class="yes">✓ Prenotato</span></div>');
-      var cancelBtn = el('<button class="btn btn-line btn-sm" '+(state.busy?"disabled":"")+'>Cancella</button>');
-      cancelBtn.addEventListener("click", function(){ cancelOwnBookingBySlot(row, iso); });
-      tag.appendChild(cancelBtn);
-      action.appendChild(tag);
+      var doneBtn = el('<button type="button" class="slot-btn slot-btn-done" '+(state.busy?"disabled":"")+' title="Cancella prenotazione">✓</button>');
+      doneBtn.addEventListener("click", function(){ cancelOwnBookingBySlot(row, iso); });
+      side.appendChild(doneBtn);
     } else {
       var disabled = full || remaining(client)<=0 || state.busy;
-      var label = full ? "Al completo" : (remaining(client)<=0 ? "Nessuna lezione" : "Prenota");
-      var btn = el('<button class="btn btn-primary btn-sm" '+(disabled?"disabled":"")+'>'+label+'</button>');
-      if(!full && remaining(client)>0){
-        btn.addEventListener("click", function(){ bookSlot(row, iso); });
+      var plusBtn = el('<button type="button" class="slot-btn slot-btn-plus" '+(disabled?"disabled":"")+' title="Prenota">+</button>');
+      if(!disabled){
+        plusBtn.addEventListener("click", function(){ bookSlot(row, iso); });
       }
-      action.appendChild(btn);
+      side.appendChild(plusBtn);
     }
-    card.appendChild(action);
+    top.appendChild(side);
+    card.appendChild(top);
+
+    var bottom = el('<div class="slot-bottom"></div>');
+    bottom.appendChild(el(
+      '<span class="'+spotsClass+'">'+
+        (full ? "Al completo" : spotsLeft+" post"+(spotsLeft===1?"o":"i")+" disponibil"+(spotsLeft===1?"e":"i")+" di "+row.capacity)+
+      '</span>'
+    ));
+    var tagHtml;
+    if(isPast) tagHtml = '<span class="slot-tag tag-passata">Passata</span>';
+    else if(row.is_mine) tagHtml = '<span class="slot-tag tag-prenotato">✓ Prenotato</span>';
+    else if(full) tagHtml = '<span class="slot-tag tag-completo">Al completo</span>';
+    else tagHtml = '<span class="slot-tag tag-incluso">Incluso</span>';
+    bottom.appendChild(el(tagHtml));
+    card.appendChild(bottom);
+
     return card;
   }
 
