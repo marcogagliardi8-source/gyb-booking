@@ -465,6 +465,7 @@
     var spotsLeft = Math.max(0, row.capacity - row.booked_count);
     var spotsClass = full ? "spots-full" : (spotsLeft<=2 ? "spots-low" : "");
     var timeLabel = String(row.time).replace(":", ".");
+    if(row.end_time) timeLabel += " – " + String(row.end_time).replace(":", ".");
 
     var card = el('<div class="slot-row"></div>');
 
@@ -843,9 +844,10 @@
             '<div class="field"><label>Data</label><input type="date" id="nc-date" value="'+todayISO()+'"></div>'+
           '</div>'+
           '<div class="field-row">'+
-            '<div class="field"><label>Orario</label><input type="time" id="nc-time" value="18:00" required></div>'+
-            '<div class="field"><label>Posti massimi</label><input type="number" id="nc-cap" min="1" max="30" value="8" required></div>'+
+            '<div class="field"><label>Inizio</label><input type="time" id="nc-time" value="18:00" required></div>'+
+            '<div class="field"><label>Fine (facoltativo)</label><input type="time" id="nc-end" value="19:00"></div>'+
           '</div>'+
+          '<div class="field"><label>Posti massimi</label><input type="number" id="nc-cap" min="1" max="30" value="8" required></div>'+
           '<button type="submit" class="btn btn-primary btn-block">Salva orario</button>'+
         '</form>'
       );
@@ -868,6 +870,8 @@
       form.addEventListener("submit", async function(ev){
         ev.preventDefault();
         var time = form.querySelector("#nc-time").value;
+        var endTime = form.querySelector("#nc-end").value || null;
+        if(endTime && endTime <= time){ alert("L'orario di fine deve essere dopo l'orario di inizio."); return; }
         var capacity = parseInt(form.querySelector("#nc-cap").value,10);
         var mode = form.getAttribute("data-mode");
         try {
@@ -877,13 +881,13 @@
             var from = form.querySelector("#nc-from").value || null;
             var to = form.querySelector("#nc-to").value || null;
             for(var i=0;i<days.length;i++){
-              await rpc("app_admin_add_class", { p_token: state.adminToken, p_day: days[i], p_time: time, p_capacity: capacity, p_valid_from: from, p_valid_to: to });
+              await rpc("app_admin_add_class", { p_token: state.adminToken, p_day: days[i], p_time: time, p_end_time: endTime, p_capacity: capacity, p_valid_from: from, p_valid_to: to });
             }
           } else {
             var dateVal = form.querySelector("#nc-date").value;
             if(!dateVal){ alert("Scegli una data."); return; }
             var dayIdx = (new Date(dateVal+"T00:00:00").getDay()+6)%7;
-            await rpc("app_admin_add_class", { p_token: state.adminToken, p_day: dayIdx, p_time: time, p_capacity: capacity, p_valid_from: dateVal, p_valid_to: dateVal });
+            await rpc("app_admin_add_class", { p_token: state.adminToken, p_day: dayIdx, p_time: time, p_end_time: endTime, p_capacity: capacity, p_valid_from: dateVal, p_valid_to: dateVal });
           }
           state.adminClasses = null;
           state.showAddClass = false;
@@ -911,9 +915,10 @@
             if(cls.valid_from) validityNote += " · dal "+fmtDateShort(cls.valid_from);
             if(cls.valid_to) validityNote += " · fino al "+fmtDateShort(cls.valid_to);
           }
+          var timeRangeLabel = cls.end_time ? esc(cls.time)+' – '+esc(cls.end_time) : esc(cls.time);
           var row = el(
             '<div class="list-item">'+
-              '<div class="imain"><div class="ititle">'+DAY_NAMES[cls.day]+' · '+esc(cls.time)+'</div>'+
+              '<div class="imain"><div class="ititle">'+DAY_NAMES[cls.day]+' · '+timeRangeLabel+'</div>'+
               '<div class="isub">Massimo '+cls.capacity+' partecipanti · '+validityNote+'</div></div>'+
               '<div class="iactions"><button class="btn btn-line btn-sm" data-act="edit">Modifica</button><button class="btn btn-danger btn-sm" data-act="del">Elimina</button></div>'+
             '</div>'
@@ -940,9 +945,12 @@
       '<form>'+
         '<div class="field-row">'+
           '<div class="field"><label>Giorno</label><select id="ec-day">'+DAY_NAMES.map(function(d,i){return '<option value="'+i+'" '+(i===cls.day?"selected":"")+'>'+d+'</option>';}).join("")+'</select></div>'+
-          '<div class="field"><label>Orario</label><input type="time" id="ec-time" value="'+cls.time+'" required></div>'+
+          '<div class="field"><label>Inizio</label><input type="time" id="ec-time" value="'+cls.time+'" required></div>'+
         '</div>'+
-        '<div class="field"><label>Posti massimi</label><input type="number" id="ec-cap" min="1" max="30" value="'+cls.capacity+'" required></div>'+
+        '<div class="field-row">'+
+          '<div class="field"><label>Fine (facoltativo)</label><input type="time" id="ec-end" value="'+(cls.end_time||"")+'"></div>'+
+          '<div class="field"><label>Posti massimi</label><input type="number" id="ec-cap" min="1" max="30" value="'+cls.capacity+'" required></div>'+
+        '</div>'+
         '<div class="field-row">'+
           '<div class="field"><label>A partire dal</label><input type="date" id="ec-from" value="'+(cls.valid_from||"")+'"></div>'+
           '<div class="field"><label>Fino al (facoltativo)</label><input type="date" id="ec-to" value="'+(cls.valid_to||"")+'"></div>'+
@@ -953,11 +961,15 @@
     );
     form.addEventListener("submit", async function(ev){
       ev.preventDefault();
+      var ecTime = form.querySelector("#ec-time").value;
+      var ecEnd = form.querySelector("#ec-end").value || null;
+      if(ecEnd && ecEnd <= ecTime){ alert("L'orario di fine deve essere dopo l'orario di inizio."); return; }
       try {
         await rpc("app_admin_update_class", {
           p_token: state.adminToken, p_class_id: cls.id,
           p_day: parseInt(form.querySelector("#ec-day").value,10),
-          p_time: form.querySelector("#ec-time").value,
+          p_time: ecTime,
+          p_end_time: ecEnd,
           p_capacity: parseInt(form.querySelector("#ec-cap").value,10),
           p_valid_from: form.querySelector("#ec-from").value || null,
           p_valid_to: form.querySelector("#ec-to").value || null
