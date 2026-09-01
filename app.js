@@ -104,6 +104,7 @@
     myBookingsLoading: false,
     loginError: "",
     loginBusy: false,
+    clientSetupMode: false,
 
     adminToken: localStorage.getItem("gyb_admin_token") || null,
     adminAuthed: false,
@@ -253,7 +254,7 @@
     }
     if(state.mode==="admin" && state.adminAuthed){
       bar.appendChild(renderSectionTabs(
-        [["dashboard","Dashboard"],["orari","Orari"],["clienti","Clienti"],["prenotazioni","Prenotazioni"]],
+        [["dashboard","Dashboard"],["orari","Orari"],["clienti","Clienti"],["prenotazioni","Calendario"]],
         state.adminTab, function(v){ state.adminTab=v; render(); }
       ));
     }
@@ -276,34 +277,81 @@
   // -----------------------------------------------------------------------
   function renderClientLogin(){
     var wrap = el('<div class="login-wrap"></div>');
-    wrap.appendChild(el('<div class="login-hero"><h1 class="display">Prenota il tuo posto</h1><p>Accedi con l\'email e il PIN che hai ricevuto dallo staff.</p></div>'));
+    var setup = state.clientSetupMode;
+
+    wrap.appendChild(el(
+      setup
+        ? '<div class="login-hero"><h1 class="display">Imposta il tuo PIN</h1><p>Scegli tu il PIN che userai per accedere da ora in poi.</p></div>'
+        : '<div class="login-hero"><h1 class="display">Prenota il tuo posto</h1><p>Accedi con la tua email e il PIN che hai scelto.</p></div>'
+    ));
     var card = el('<div class="card"></div>');
     if(state.loginError) card.appendChild(el('<div class="error-msg">'+esc(state.loginError)+'</div>'));
-    var form = el(
-      '<form>'+
-        '<div class="field"><label>Email</label><input type="email" id="login-email" placeholder="nome.cognome@email.it" autocomplete="email" required></div>'+
-        '<div class="field"><label>PIN</label><input type="text" inputmode="numeric" id="login-pin" placeholder="••••" maxlength="6" required></div>'+
-        '<button type="submit" class="btn btn-primary btn-block" '+(state.loginBusy?"disabled":"")+'>'+(state.loginBusy?"Accesso in corso…":"Accedi")+'</button>'+
-      '</form>'
-    );
-    form.addEventListener("submit", async function(ev){
-      ev.preventDefault();
-      var email = form.querySelector("#login-email").value.trim();
-      var pin = form.querySelector("#login-pin").value.trim();
-      state.loginBusy = true; state.loginError=""; render();
-      try {
-        var res = await rpc("app_client_login", { p_email: email, p_pin: pin });
-        state.clientToken = res.token;
-        state.clientProfile = res.client;
-        localStorage.setItem("gyb_client_token", res.token);
-        state.clientTab = "calendario";
-      } catch(e){
-        state.loginError = "Email o PIN non corretti. Controlla e riprova.";
-      }
-      state.loginBusy = false;
-      render();
-    });
-    card.appendChild(form);
+
+    if(!setup){
+      var form = el(
+        '<form>'+
+          '<div class="field"><label>Email</label><input type="email" id="login-email" placeholder="nome.cognome@email.it" autocomplete="email" required></div>'+
+          '<div class="field"><label>PIN</label><input type="text" inputmode="numeric" id="login-pin" placeholder="••••" maxlength="6" required></div>'+
+          '<button type="submit" class="btn btn-primary btn-block" '+(state.loginBusy?"disabled":"")+'>'+(state.loginBusy?"Accesso in corso…":"Accedi")+'</button>'+
+        '</form>'
+      );
+      form.addEventListener("submit", async function(ev){
+        ev.preventDefault();
+        var email = form.querySelector("#login-email").value.trim();
+        var pin = form.querySelector("#login-pin").value.trim();
+        state.loginBusy = true; state.loginError=""; render();
+        try {
+          var res = await rpc("app_client_login", { p_email: email, p_pin: pin });
+          state.clientToken = res.token;
+          state.clientProfile = res.client;
+          localStorage.setItem("gyb_client_token", res.token);
+          state.clientTab = "calendario";
+        } catch(e){
+          state.loginError = e.message || "Email o PIN non corretti. Controlla e riprova.";
+        }
+        state.loginBusy = false;
+        render();
+      });
+      card.appendChild(form);
+      var toggle = el('<div class="hint" style="margin-top:12px;text-align:center">Primo accesso o PIN dimenticato? <button type="button" id="goto-setup" style="background:none;border:none;padding:0;color:var(--magenta-ink);font-weight:700;text-decoration:underline;cursor:pointer">Imposta il tuo PIN</button></div>');
+      toggle.querySelector("#goto-setup").addEventListener("click", function(){ state.clientSetupMode=true; state.loginError=""; render(); });
+      card.appendChild(toggle);
+    } else {
+      var sform = el(
+        '<form>'+
+          '<div class="field"><label>Email</label><input type="email" id="setup-email" placeholder="nome.cognome@email.it" autocomplete="email" required></div>'+
+          '<div class="field"><label>Nuovo PIN</label><input type="text" inputmode="numeric" id="setup-pin" placeholder="almeno 4 cifre" maxlength="6" required></div>'+
+          '<div class="field"><label>Conferma PIN</label><input type="text" inputmode="numeric" id="setup-pin-confirm" maxlength="6" required></div>'+
+          '<button type="submit" class="btn btn-primary btn-block" '+(state.loginBusy?"disabled":"")+'>'+(state.loginBusy?"Salvataggio…":"Salva e accedi")+'</button>'+
+        '</form>'
+      );
+      sform.addEventListener("submit", async function(ev){
+        ev.preventDefault();
+        var email = sform.querySelector("#setup-email").value.trim();
+        var pin = sform.querySelector("#setup-pin").value.trim();
+        var pinConfirm = sform.querySelector("#setup-pin-confirm").value.trim();
+        if(pin.length<4){ state.loginError="Il PIN deve avere almeno 4 cifre."; render(); return; }
+        if(pin!==pinConfirm){ state.loginError="I due PIN inseriti non coincidono."; render(); return; }
+        state.loginBusy = true; state.loginError=""; render();
+        try {
+          var res = await rpc("app_client_set_pin", { p_email: email, p_new_pin: pin });
+          state.clientToken = res.token;
+          state.clientProfile = res.client;
+          localStorage.setItem("gyb_client_token", res.token);
+          state.clientTab = "calendario";
+          state.clientSetupMode = false;
+        } catch(e){
+          state.loginError = e.message || "Non è stato possibile impostare il PIN. Contatta lo staff.";
+        }
+        state.loginBusy = false;
+        render();
+      });
+      card.appendChild(sform);
+      var back = el('<div class="hint" style="margin-top:12px;text-align:center"><button type="button" id="back-to-login" style="background:none;border:none;padding:0;color:var(--magenta-ink);font-weight:700;text-decoration:underline;cursor:pointer">Torna al login</button></div>');
+      back.querySelector("#back-to-login").addEventListener("click", function(){ state.clientSetupMode=false; state.loginError=""; render(); });
+      card.appendChild(back);
+    }
+
     wrap.appendChild(card);
     return wrap;
   }
@@ -998,10 +1046,8 @@
       var form = el(
         '<form class="toggle-form">'+
           '<div class="field"><label>Nome e cognome</label><input type="text" id="nu-name" required></div>'+
-          '<div class="field-row">'+
-            '<div class="field"><label>Email</label><input type="email" id="nu-email" required></div>'+
-            '<div class="field"><label>PIN</label><input type="text" id="nu-pin" inputmode="numeric" maxlength="6" placeholder="4 cifre" required></div>'+
-          '</div>'+
+          '<div class="field"><label>Email</label><input type="email" id="nu-email" required></div>'+
+          '<div class="hint" style="margin-top:-6px">Il cliente sceglierà da solo il proprio PIN al primo accesso, dalla schermata di login ("Imposta il tuo PIN").</div>'+
           '<div class="field-row">'+
             '<div class="field"><label>Nome pacchetto</label><input type="text" id="nu-pkgname" placeholder="Pacchetto 10 lezioni" required></div>'+
             '<div class="field"><label>N. lezioni</label><input type="number" id="nu-total" min="1" value="10" required></div>'+
@@ -1020,7 +1066,6 @@
             p_token: state.adminToken,
             p_name: form.querySelector("#nu-name").value.trim(),
             p_email: form.querySelector("#nu-email").value.trim(),
-            p_pin: form.querySelector("#nu-pin").value.trim(),
             p_pkg_name: form.querySelector("#nu-pkgname").value.trim(),
             p_total: parseInt(form.querySelector("#nu-total").value,10),
             p_payment_date: form.querySelector("#nu-payment").value || null,
@@ -1060,6 +1105,7 @@
         badges.appendChild(el('<span class="badge '+pkgBadgeClass+'">'+rem+' rimaste</span>'));
         badges.appendChild(el('<span class="badge '+certBadgeClass+'">'+certLabel+'</span>'));
         badges.appendChild(el('<span class="badge '+consentBadgeClass+'">'+consentLabel+'</span>'));
+        if(!c.has_pin) badges.appendChild(el('<span class="badge badge-warn">PIN non impostato</span>'));
         row.appendChild(badges);
         var actions = el('<div class="iactions"><button class="btn btn-line btn-sm" data-act="renew">Rinnova</button><button class="btn btn-line btn-sm" data-act="edit">Modifica</button></div>');
         actions.querySelector('[data-act="renew"]').addEventListener("click", function(){ state.renewingClientId=c.id; render(); });
@@ -1109,15 +1155,14 @@
     var form = el(
       '<form>'+
         '<div class="field"><label>Nome e cognome</label><input type="text" id="eu-name" value="'+esc(c.name)+'" required></div>'+
-        '<div class="field-row">'+
-          '<div class="field"><label>Email</label><input type="email" id="eu-email" value="'+esc(c.email)+'" required></div>'+
-          '<div class="field"><label>Nuovo PIN (lascia vuoto per non cambiarlo)</label><input type="text" id="eu-pin" inputmode="numeric" maxlength="6"></div>'+
-        '</div>'+
+        '<div class="field"><label>Email</label><input type="email" id="eu-email" value="'+esc(c.email)+'" required></div>'+
         '<div class="field"><label>Nome pacchetto</label><input type="text" id="eu-pkgname" value="'+esc(c.pkg_name)+'" required></div>'+
         '<div class="field"><label>Scadenza certificato medico</label><input type="date" id="eu-cert" value="'+(c.med_cert_expiry||"")+'"></div>'+
-        '<div style="display:flex;gap:8px">'+
+        '<div class="hint" style="margin-top:-6px">'+(c.has_pin?"Il PIN è impostato dal cliente. Se lo ha dimenticato, usa \"Resetta PIN\": al prossimo accesso potrà sceglierne uno nuovo.":"Il cliente non ha ancora impostato un PIN: può farlo dalla schermata di login (\"Imposta il tuo PIN\").")+'</div>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
           '<button type="submit" class="btn btn-primary">Salva</button>'+
           '<button type="button" class="btn btn-line" id="eu-cancel">Annulla</button>'+
+          (c.has_pin ? '<button type="button" class="btn btn-line" id="eu-reset-pin">Resetta PIN</button>' : '')+
           '<button type="button" class="btn btn-danger" id="eu-delete" style="margin-left:auto">Elimina cliente</button>'+
         '</div>'+
       '</form>'
@@ -1129,7 +1174,6 @@
           p_token: state.adminToken, p_client_id: c.id,
           p_name: form.querySelector("#eu-name").value.trim(),
           p_email: form.querySelector("#eu-email").value.trim(),
-          p_pin: form.querySelector("#eu-pin").value.trim() || null,
           p_pkg_name: form.querySelector("#eu-pkgname").value.trim(),
           p_med_cert_expiry: form.querySelector("#eu-cert").value || null
         });
@@ -1139,6 +1183,16 @@
       render();
     });
     form.querySelector("#eu-cancel").addEventListener("click", function(){ state.editingClientId=null; render(); });
+    var resetPinBtn = form.querySelector("#eu-reset-pin");
+    if(resetPinBtn){
+      resetPinBtn.addEventListener("click", async function(){
+        if(confirm("Resettare il PIN di "+c.name+"? Al prossimo accesso potrà impostarne uno nuovo.")){
+          try { await rpc("app_admin_reset_client_pin", { p_token: state.adminToken, p_client_id: c.id }); state.adminClients=null; state.editingClientId=null; }
+          catch(e){ alert(e.message || "Errore."); }
+          render();
+        }
+      });
+    }
     form.querySelector("#eu-delete").addEventListener("click", async function(){
       if(confirm("Eliminare "+c.name+" e le sue prenotazioni?")){
         try { await rpc("app_admin_delete_client", { p_token: state.adminToken, p_client_id: c.id }); state.adminClients=null; state.editingClientId=null; }
