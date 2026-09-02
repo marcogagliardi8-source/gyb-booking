@@ -455,7 +455,7 @@
     }
     var cs = certStatus(client);
     if(cs.level==="crit"){
-      alerts.push(el('<div class="banner" style="background:var(--crit-bg);border-color:transparent"><span>🩺</span><div><strong style="color:var(--crit)">Certificato medico scaduto</strong> il '+fmtDateShort(client.medCertExpiry)+'. Portane uno aggiornato prima del prossimo allenamento.</div></div>'));
+      alerts.push(el('<div class="banner" style="background:var(--crit-bg);border-color:transparent"><span>🩺</span><div><strong style="color:var(--crit)">Certificato medico scaduto</strong> il '+fmtDateShort(client.medCertExpiry)+'. Non puoi prenotare nuove lezioni finché lo staff non registra un certificato aggiornato: portalo o invialo appena possibile.</div></div>'));
     } else if(cs.level==="warn"){
       alerts.push(el('<div class="banner" style="background:var(--warn-bg);border-color:transparent"><span>🩺</span><div><strong style="color:var(--warn)">Certificato medico in scadenza</strong> il '+fmtDateShort(client.medCertExpiry)+' (tra '+cs.days+' giorn'+(cs.days===1?"o":"i")+'). Ricordati di rinnovarlo.</div></div>'));
     }
