@@ -166,7 +166,20 @@
     border-radius: 9px; cursor: pointer; transition: background .12s, border-color .12s;
     overflow: hidden;
   }
-  .day-chk-pill input[type="checkbox"] { margin: 0; flex-shrink: 0; accent-color: var(--magenta); }
+  .day-chk-pill input[type="checkbox"] {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; min-width: 16px; min-height: 16px; max-width: 16px; max-height: 16px;
+    margin: 0; flex-shrink: 0; flex-grow: 0; box-sizing: border-box;
+    border: 1.5px solid var(--line); border-radius: 4px; background: var(--surface);
+    cursor: pointer; position: relative;
+  }
+  .day-chk-pill input[type="checkbox"]:checked {
+    background: var(--magenta); border-color: var(--magenta);
+  }
+  .day-chk-pill input[type="checkbox"]:checked::after {
+    content: ''; position: absolute; left: 4px; top: 0px; width: 4px; height: 8px;
+    border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg);
+  }
   .day-chk-pill:has(input:checked) { background: #FBE1EC; border-color: var(--magenta); }
 
   .btn {
