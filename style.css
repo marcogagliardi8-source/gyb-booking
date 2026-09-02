@@ -326,6 +326,16 @@
   .cal-count { font-size: 10.5px; font-weight: 800; color: var(--ink-soft); }
   .cal-count.full { color: var(--crit); }
 
+  /* ---------- calendario admin, vista giorno (mobile) ---------- */
+  .day-cal-list { display: flex; flex-direction: column; gap: 8px; }
+  .day-cal-list .cal-cell.day-slot {
+    border-radius: 12px; border-top: none; border-left: 3px solid var(--magenta);
+    box-shadow: var(--shadow); min-height: auto; padding: 10px 12px;
+  }
+  .day-cal-list .cal-slot-time { font-size: 14px; }
+  .day-cal-list .cal-chips { margin-top: 2px; }
+  .day-cal-list .cal-count { margin-top: 2px; }
+
   /* ---------- slot detail modal ---------- */
   .modal-overlay {
     position: fixed; inset: 0; background: rgba(20,14,16,.55);
@@ -346,6 +356,8 @@
   @media (max-width: 420px) {
     .kpi-grid { grid-template-columns: 1fr 1fr; }
     .class-card { flex-wrap: wrap; }
+    .field-row { flex-wrap: wrap; }
+    .field-row .field { flex: 1 1 100%; }
   }
 
   /* ---------- loading / async states ---------- */
@@ -388,6 +400,16 @@
   .cal-chip.more { background: var(--surface); color: var(--ink-soft); border: 1px solid var(--line); }
   .cal-count { font-size: 10.5px; font-weight: 800; color: var(--ink-soft); }
   .cal-count.full { color: var(--crit); }
+
+  /* ---------- calendario admin, vista giorno (mobile) ---------- */
+  .day-cal-list { display: flex; flex-direction: column; gap: 8px; }
+  .day-cal-list .cal-cell.day-slot {
+    border-radius: 12px; border-top: none; border-left: 3px solid var(--magenta);
+    box-shadow: var(--shadow); min-height: auto; padding: 10px 12px;
+  }
+  .day-cal-list .cal-slot-time { font-size: 14px; }
+  .day-cal-list .cal-chips { margin-top: 2px; }
+  .day-cal-list .cal-count { margin-top: 2px; }
 
   /* ---------- slot detail modal ---------- */
   .modal-overlay { position: fixed; inset: 0; background: rgba(20,14,16,.55); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50; }
