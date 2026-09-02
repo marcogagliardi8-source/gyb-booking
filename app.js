@@ -487,6 +487,7 @@
     }
 
     wrap.appendChild(renderDayStrip(monday, days, todayIso));
+    wrap.appendChild(el('<div class="hint">Hai già prenotato una lezione? Tocca la ✕ verde per annullarla, oppure vai sulla scheda "Le mie prenotazioni" qui sopra.</div>'));
 
     var wstart = weekStartISO(state.weekOffset);
     var rows = state.scheduleCache[wstart];
@@ -550,7 +551,7 @@
     if(isPast){
       side.appendChild(el('<div class="slot-btn slot-btn-disabled">–</div>'));
     } else if(row.is_mine){
-      var doneBtn = el('<button type="button" class="slot-btn slot-btn-done" '+(state.busy?"disabled":"")+' title="Cancella prenotazione">✓</button>');
+      var doneBtn = el('<button type="button" class="slot-btn slot-btn-done" '+(state.busy?"disabled":"")+' title="Tocca per annullare la prenotazione" aria-label="Annulla prenotazione">✕</button>');
       doneBtn.addEventListener("click", function(){ cancelOwnBookingBySlot(row, iso); });
       side.appendChild(doneBtn);
     } else {
@@ -596,6 +597,8 @@
   }
 
   async function cancelOwnBookingBySlot(row, iso){
+    var activityLabel = row.activity || ACTIVITY_SHORT;
+    if(!window.confirm('Annullare la prenotazione per "'+activityLabel+'" ('+String(row.time).replace(":",".")+')?')) return;
     state.busy = true; render();
     try {
       // Troviamo l'id prenotazione tramite "le mie prenotazioni" se non già in cache.
@@ -636,8 +639,9 @@
           '<div class="booking-row"><div class="bmain"><div class="bname">'+esc(fmtDayLabel(d))+'</div>'+
           '<div class="bmeta">'+esc(b.time)+' · '+esc(b.activity || ACTIVITY_SHORT)+'</div></div></div>'
         );
-        var cancel = el('<button class="btn btn-line btn-sm" '+(state.busy?"disabled":"")+'>Cancella</button>');
+        var cancel = el('<button class="btn btn-line btn-sm" '+(state.busy?"disabled":"")+' title="Annulla questa prenotazione">Annulla prenotazione</button>');
         cancel.addEventListener("click", async function(){
+          if(!window.confirm('Annullare la prenotazione per "'+(b.activity || ACTIVITY_SHORT)+'" di '+fmtDayLabel(d)+' alle '+b.time+'?')) return;
           state.busy = true; render();
           try {
             var updated = await rpc("app_cancel_own_booking", { p_token: state.clientToken, p_booking_id: b.booking_id });
