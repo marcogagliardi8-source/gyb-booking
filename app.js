@@ -126,6 +126,8 @@
     loginError: "",
     loginBusy: false,
     clientSetupMode: false,
+    clientSetupStep: "email",
+    clientSetupEmail: "",
 
     adminToken: localStorage.getItem("gyb_admin_token") || null,
     adminAuthed: false,
@@ -339,41 +341,70 @@
       });
       card.appendChild(form);
       var toggle = el('<div class="hint" style="margin-top:12px;text-align:center">Primo accesso o PIN dimenticato? <button type="button" id="goto-setup" style="background:none;border:none;padding:0;color:var(--magenta-ink);font-weight:700;text-decoration:underline;cursor:pointer">Imposta il tuo PIN</button></div>');
-      toggle.querySelector("#goto-setup").addEventListener("click", function(){ state.clientSetupMode=true; state.loginError=""; render(); });
+      toggle.querySelector("#goto-setup").addEventListener("click", function(){ state.clientSetupMode=true; state.clientSetupStep="email"; state.loginError=""; render(); });
       card.appendChild(toggle);
-    } else {
-      var sform = el(
+    } else if(state.clientSetupStep==="code"){
+      // Passo 2: codice ricevuto via email + nuovo PIN.
+      card.appendChild(el('<div class="hint" style="margin-bottom:14px">Ti abbiamo inviato un codice a 6 cifre via email a <strong>'+esc(state.clientSetupEmail)+'</strong>. Inseriscilo qui sotto insieme al nuovo PIN.</div>'));
+      var cform = el(
         '<form>'+
-          '<div class="field"><label>Email</label><input type="email" id="setup-email" placeholder="nome.cognome@email.it" autocomplete="email" required></div>'+
+          '<div class="field"><label>Codice ricevuto via email</label><input type="text" inputmode="numeric" id="setup-code" placeholder="123456" maxlength="6" required></div>'+
           '<div class="field"><label>Nuovo PIN</label><input type="text" inputmode="numeric" id="setup-pin" placeholder="almeno 4 cifre" maxlength="6" required></div>'+
           '<div class="field"><label>Conferma PIN</label><input type="text" inputmode="numeric" id="setup-pin-confirm" maxlength="6" required></div>'+
-          '<button type="submit" class="btn btn-primary btn-block" '+(state.loginBusy?"disabled":"")+'>'+(state.loginBusy?"Salvataggio…":"Salva e accedi")+'</button>'+
+          '<button type="submit" class="btn btn-primary btn-block" '+(state.loginBusy?"disabled":"")+'>'+(state.loginBusy?"Salvataggio…":"Verifica e salva")+'</button>'+
         '</form>'
       );
-      sform.addEventListener("submit", async function(ev){
+      cform.addEventListener("submit", async function(ev){
         ev.preventDefault();
-        var email = sform.querySelector("#setup-email").value.trim();
-        var pin = sform.querySelector("#setup-pin").value.trim();
-        var pinConfirm = sform.querySelector("#setup-pin-confirm").value.trim();
+        var code = cform.querySelector("#setup-code").value.trim();
+        var pin = cform.querySelector("#setup-pin").value.trim();
+        var pinConfirm = cform.querySelector("#setup-pin-confirm").value.trim();
         if(pin.length<4){ state.loginError="Il PIN deve avere almeno 4 cifre."; render(); return; }
         if(pin!==pinConfirm){ state.loginError="I due PIN inseriti non coincidono."; render(); return; }
         state.loginBusy = true; state.loginError=""; render();
         try {
-          var res = await rpc("app_client_set_pin", { p_email: email, p_new_pin: pin });
+          var res = await rpc("app_client_verify_and_set_pin", { p_email: state.clientSetupEmail, p_code: code, p_new_pin: pin });
           state.clientToken = res.token;
           state.clientProfile = res.client;
           localStorage.setItem("gyb_client_token", res.token);
           state.clientTab = "calendario";
           state.clientSetupMode = false;
+          state.clientSetupStep = "email";
         } catch(e){
-          state.loginError = e.message || "Non è stato possibile impostare il PIN. Contatta lo staff.";
+          state.loginError = e.message || "Codice non valido. Controlla e riprova.";
+        }
+        state.loginBusy = false;
+        render();
+      });
+      card.appendChild(cform);
+      var backCode = el('<div class="hint" style="margin-top:12px;text-align:center"><button type="button" id="back-to-email" style="background:none;border:none;padding:0;color:var(--magenta-ink);font-weight:700;text-decoration:underline;cursor:pointer">Cambia email / richiedi un nuovo codice</button></div>');
+      backCode.querySelector("#back-to-email").addEventListener("click", function(){ state.clientSetupStep="email"; state.loginError=""; render(); });
+      card.appendChild(backCode);
+    } else {
+      // Passo 1: il cliente inserisce la sua email -> riceve un codice via email.
+      var sform = el(
+        '<form>'+
+          '<div class="field"><label>Email</label><input type="email" id="setup-email" placeholder="nome.cognome@email.it" autocomplete="email" required></div>'+
+          '<button type="submit" class="btn btn-primary btn-block" '+(state.loginBusy?"disabled":"")+'>'+(state.loginBusy?"Invio in corso…":"Invia codice di verifica")+'</button>'+
+        '</form>'
+      );
+      sform.addEventListener("submit", async function(ev){
+        ev.preventDefault();
+        var email = sform.querySelector("#setup-email").value.trim();
+        state.loginBusy = true; state.loginError=""; render();
+        try {
+          await rpc("app_client_request_pin_code", { p_email: email });
+          state.clientSetupEmail = email;
+          state.clientSetupStep = "code";
+        } catch(e){
+          state.loginError = e.message || "Non è stato possibile inviare il codice. Contatta lo staff.";
         }
         state.loginBusy = false;
         render();
       });
       card.appendChild(sform);
       var back = el('<div class="hint" style="margin-top:12px;text-align:center"><button type="button" id="back-to-login" style="background:none;border:none;padding:0;color:var(--magenta-ink);font-weight:700;text-decoration:underline;cursor:pointer">Torna al login</button></div>');
-      back.querySelector("#back-to-login").addEventListener("click", function(){ state.clientSetupMode=false; state.loginError=""; render(); });
+      back.querySelector("#back-to-login").addEventListener("click", function(){ state.clientSetupMode=false; state.clientSetupStep="email"; state.loginError=""; render(); });
       card.appendChild(back);
     }
 
