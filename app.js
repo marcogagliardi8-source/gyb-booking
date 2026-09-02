@@ -26,6 +26,8 @@
   var DAY_NAMES_SHORT = ["Lun","Mar","Mer","Gio","Ven","Sab","Dom"];
   var MONTH_NAMES = ["gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto","settembre","ottobre","novembre","dicembre"];
   var CERT_WARN_DAYS = 30;
+  var MOBILE_BREAKPOINT = 700;
+  function isNarrowViewport(){ return window.innerWidth <= MOBILE_BREAKPOINT; }
 
   var PRIVACY_CONTACT_EMAIL = "[email di contatto della palestra]";
   var PRIVACY_SECTIONS = [
@@ -1046,7 +1048,10 @@
       var form = el(
         '<form class="toggle-form">'+
           '<div class="field"><label>Nome e cognome</label><input type="text" id="nu-name" required></div>'+
-          '<div class="field"><label>Email</label><input type="email" id="nu-email" required></div>'+
+          '<div class="field-row">'+
+            '<div class="field"><label>Email</label><input type="email" id="nu-email" required></div>'+
+            '<div class="field"><label>Telefono (facoltativo)</label><input type="tel" id="nu-phone" placeholder="333 1234567"></div>'+
+          '</div>'+
           '<div class="hint" style="margin-top:-6px">Il cliente sceglierà da solo il proprio PIN al primo accesso, dalla schermata di login ("Imposta il tuo PIN").</div>'+
           '<div class="field-row">'+
             '<div class="field"><label>Nome pacchetto</label><input type="text" id="nu-pkgname" placeholder="Pacchetto 10 lezioni" required></div>'+
@@ -1066,6 +1071,7 @@
             p_token: state.adminToken,
             p_name: form.querySelector("#nu-name").value.trim(),
             p_email: form.querySelector("#nu-email").value.trim(),
+            p_phone: form.querySelector("#nu-phone").value.trim(),
             p_pkg_name: form.querySelector("#nu-pkgname").value.trim(),
             p_total: parseInt(form.querySelector("#nu-total").value,10),
             p_payment_date: form.querySelector("#nu-payment").value || null,
@@ -1099,7 +1105,7 @@
         var row = el('<div class="list-item" style="flex-wrap:wrap"></div>');
         row.appendChild(el(
           '<div class="imain"><div class="ititle">'+esc(c.name)+'</div>'+
-          '<div class="isub">'+esc(c.email)+' · '+esc(c.pkg_name)+' · '+c.used+'/'+c.total+' lezioni · ultimo pagamento '+fmtDateShort(c.payment_date)+'</div></div>'
+          '<div class="isub">'+esc(c.email)+(c.phone?' · '+esc(c.phone):'')+' · '+esc(c.pkg_name)+' · '+c.used+'/'+c.total+' lezioni · ultimo pagamento '+fmtDateShort(c.payment_date)+'</div></div>'
         ));
         var badges = el('<div style="display:flex;gap:6px;flex-wrap:wrap"></div>');
         badges.appendChild(el('<span class="badge '+pkgBadgeClass+'">'+rem+' rimaste</span>'));
@@ -1155,7 +1161,10 @@
     var form = el(
       '<form>'+
         '<div class="field"><label>Nome e cognome</label><input type="text" id="eu-name" value="'+esc(c.name)+'" required></div>'+
-        '<div class="field"><label>Email</label><input type="email" id="eu-email" value="'+esc(c.email)+'" required></div>'+
+        '<div class="field-row">'+
+          '<div class="field"><label>Email</label><input type="email" id="eu-email" value="'+esc(c.email)+'" required></div>'+
+          '<div class="field"><label>Telefono (facoltativo)</label><input type="tel" id="eu-phone" value="'+esc(c.phone||"")+'" placeholder="333 1234567"></div>'+
+        '</div>'+
         '<div class="field"><label>Nome pacchetto</label><input type="text" id="eu-pkgname" value="'+esc(c.pkg_name)+'" required></div>'+
         '<div class="field"><label>Scadenza certificato medico</label><input type="date" id="eu-cert" value="'+(c.med_cert_expiry||"")+'"></div>'+
         '<div class="hint" style="margin-top:-6px">'+(c.has_pin?"Il PIN è impostato dal cliente. Se lo ha dimenticato, usa \"Resetta PIN\": al prossimo accesso potrà sceglierne uno nuovo.":"Il cliente non ha ancora impostato un PIN: può farlo dalla schermata di login (\"Imposta il tuo PIN\").")+'</div>'+
@@ -1174,6 +1183,7 @@
           p_token: state.adminToken, p_client_id: c.id,
           p_name: form.querySelector("#eu-name").value.trim(),
           p_email: form.querySelector("#eu-email").value.trim(),
+          p_phone: form.querySelector("#eu-phone").value.trim(),
           p_pkg_name: form.querySelector("#eu-pkgname").value.trim(),
           p_med_cert_expiry: form.querySelector("#eu-cert").value || null
         });
@@ -1204,10 +1214,53 @@
     return row;
   }
 
+  function renderAdminDaySlots(iso, todayIso, bookingRows){
+    var days = weekDates(state.weekOffset);
+    var dIdx = days.findIndex(function(d){ return toISODate(d)===iso; });
+    var dayClasses = state.adminClasses.filter(function(c){ return classOccursOn(c, iso, dIdx); })
+      .slice().sort(function(a,b){ return a.time.localeCompare(b.time); });
+    var list = el('<div class="day-cal-list"></div>');
+    if(dayClasses.length===0){
+      list.appendChild(el('<div class="empty-note">Nessuna mini-class in programma questo giorno.</div>'));
+      return list;
+    }
+    dayClasses.forEach(function(cls){
+      var bs = bookingRows.filter(function(b){ return b.class_id===cls.id && b.booking_date===iso; });
+      var full = bs.length >= cls.capacity;
+      var key = cls.id+"_"+iso;
+      var selected = state.selectedSlotKey===key;
+      var timeLabel = cls.time + (cls.end_time ? " – "+cls.end_time : "");
+      var row = el('<div class="cal-cell slot day-slot'+(iso===todayIso?" today-col":"")+(selected?" selected":"")+'"></div>');
+      row.appendChild(el('<div class="cal-slot-time">'+esc(timeLabel)+'</div>'));
+      row.appendChild(el('<div class="cal-slot-label">'+esc(ACTIVITY_SHORT)+'</div>'));
+      var chips = el('<div class="cal-chips"></div>');
+      bs.slice(0,6).forEach(function(b){ chips.appendChild(el('<span class="cal-chip">'+esc(surname(b.client_name))+'</span>')); });
+      if(bs.length>6) chips.appendChild(el('<span class="cal-chip more">+'+(bs.length-6)+'</span>'));
+      row.appendChild(chips);
+      row.appendChild(el('<div class="cal-count'+(full?" full":"")+' tabular">'+bs.length+'/'+cls.capacity+'</div>'));
+      row.addEventListener("click", function(){ state.selectedSlotKey = selected ? null : key; render(); });
+      list.appendChild(row);
+    });
+    return list;
+  }
+
   function renderAdminPrenotazioni(){
     ensureAdminData();
     var wrap = el('<div style="display:flex;flex-direction:column;gap:14px"></div>');
-    wrap.appendChild(renderWeekNav(function(){return state.weekOffset;}, function(v){state.weekOffset=v;}));
+    var narrow = isNarrowViewport();
+    var days = weekDates(state.weekOffset);
+    var todayIso = todayISO();
+
+    if(narrow){
+      var inWeek = days.some(function(d){ return toISODate(d)===state.selectedDate; });
+      if(!state.selectedDate || !inWeek){
+        var todayInWeek = days.some(function(d){ return toISODate(d)===todayIso; });
+        state.selectedDate = todayInWeek ? todayIso : toISODate(days[0]);
+      }
+      wrap.appendChild(renderDayStrip(days[0], days, todayIso));
+    } else {
+      wrap.appendChild(renderWeekNav(function(){return state.weekOffset;}, function(v){state.weekOffset=v;}));
+    }
 
     if(state.adminClasses===null){
       wrap.appendChild(el('<div class="loading-row"><div class="spinner"></div></div>'));
@@ -1228,8 +1281,12 @@
       return wrap;
     }
 
-    var days = weekDates(state.weekOffset);
-    var todayIso = todayISO();
+    if(narrow){
+      wrap.appendChild(renderAdminDaySlots(state.selectedDate, todayIso, bookingRows));
+      wrap.appendChild(el('<div class="hint">Tocca un turno per vedere l\'elenco completo dei prenotati e gestire le cancellazioni.</div>'));
+      return wrap;
+    }
+
     var times = Array.from(new Set(state.adminClasses.map(function(c){ return c.time; }))).sort();
 
     var calWrap = el('<div class="cal-wrap"></div>');
@@ -1333,6 +1390,12 @@
     overlay.addEventListener("click", function(ev){ if(ev.target===overlay){ state.showPrivacy=false; render(); } });
     return overlay;
   }
+
+  var lastNarrow = isNarrowViewport();
+  window.addEventListener("resize", function(){
+    var now = isNarrowViewport();
+    if (now !== lastNarrow) { lastNarrow = now; render(); }
+  });
 
   render();
 })();
