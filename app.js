@@ -21,8 +21,12 @@
     try {
       if (new URLSearchParams(window.location.search).get("staff") === "1") {
         localStorage.setItem("gyb_staff_device", "1");
-        var cleanUrl = window.location.pathname + window.location.hash;
-        window.history.replaceState(null, "", cleanUrl);
+        // Nota: NON puliamo piu' l'URL da "?staff=1" (a differenza di prima).
+        // Se l'utente salva questa pagina sulla schermata Home dell'iPhone,
+        // quell'icona apre un contenitore di memoria separato da Safari
+        // (localStorage isolato), quindi il flag salvato sopra non basta:
+        // serve che l'URL salvato nell'icona contenga ancora "?staff=1",
+        // cosi' ogni apertura dall'icona lo re-imposta nel suo contenitore.
         return true;
       }
       return localStorage.getItem("gyb_staff_device") === "1" || !!localStorage.getItem("gyb_admin_token");
