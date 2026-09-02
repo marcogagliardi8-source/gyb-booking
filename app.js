@@ -12,6 +12,23 @@
     supabaseClient = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
   }
 
+  // -----------------------------------------------------------------------
+  // Dispositivo staff: solo chi apre il link speciale "?staff=1" (o ha già
+  // fatto accesso come staff su questo dispositivo) vede la scelta
+  // "Sono un cliente / Sono lo staff". I clienti non la vedono mai.
+  // -----------------------------------------------------------------------
+  var IS_STAFF_DEVICE = (function(){
+    try {
+      if (new URLSearchParams(window.location.search).get("staff") === "1") {
+        localStorage.setItem("gyb_staff_device", "1");
+        var cleanUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState(null, "", cleanUrl);
+        return true;
+      }
+      return localStorage.getItem("gyb_staff_device") === "1" || !!localStorage.getItem("gyb_admin_token");
+    } catch(e){ return false; }
+  })();
+
   /** Chiama una funzione RPC di Supabase. Lancia un errore con messaggio leggibile. */
   async function rpc(fn, params) {
     var res = await supabaseClient.rpc(fn, params || {});
@@ -237,16 +254,18 @@
     var dark = document.documentElement.getAttribute("data-theme")==="dark" || (mq.matches && document.documentElement.getAttribute("data-theme")!=="light");
     if(dark){ row.querySelector(".logo-light").style.display="none"; row.querySelector(".logo-dark").style.display="block"; }
 
-    var modeSwitch = el(
-      '<div class="mode-switch">'+
-        '<button data-mode="client" class="'+(state.mode==="client"?"active":"")+'">Sono un cliente</button>'+
-        '<button data-mode="admin" class="'+(state.mode==="admin"?"active":"")+'">Sono lo staff</button>'+
-      '</div>'
-    );
-    modeSwitch.querySelectorAll("button").forEach(function(b){
-      b.addEventListener("click", function(){ state.mode=b.getAttribute("data-mode"); state.selectedSlotKey=null; render(); });
-    });
-    bar.appendChild(modeSwitch);
+    if(IS_STAFF_DEVICE){
+      var modeSwitch = el(
+        '<div class="mode-switch">'+
+          '<button data-mode="client" class="'+(state.mode==="client"?"active":"")+'">Sono un cliente</button>'+
+          '<button data-mode="admin" class="'+(state.mode==="admin"?"active":"")+'">Sono lo staff</button>'+
+        '</div>'
+      );
+      modeSwitch.querySelectorAll("button").forEach(function(b){
+        b.addEventListener("click", function(){ state.mode=b.getAttribute("data-mode"); state.selectedSlotKey=null; render(); });
+      });
+      bar.appendChild(modeSwitch);
+    }
 
     if(state.mode==="client" && state.clientProfile){
       bar.appendChild(renderSectionTabs(
