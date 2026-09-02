@@ -121,6 +121,8 @@
     scheduleError: "",
     myBookings: null,
     myBookingsLoading: false,
+    myPurchaseHistory: null,
+    myPurchaseHistoryLoading: false,
     loginError: "",
     loginBusy: false,
     clientSetupMode: false,
@@ -132,6 +134,7 @@
     adminClients: null, adminClientsLoading: false,
     adminClasses: null, adminClassesLoading: false,
     adminBookingsCache: {}, adminBookingsLoading: false,
+    adminHistoryCache: {}, adminHistoryLoading: false,
     adminLoginError: "",
     adminLoginBusy: false,
 
@@ -140,6 +143,7 @@
     editingClassId: null,
     editingClientId: null,
     renewingClientId: null,
+    viewingHistoryClientId: null,
     selectedSlotKey: null,
     showPrivacy: false,
     changingPin: false,
@@ -703,7 +707,46 @@
     wrap.appendChild(consentCard);
     consentCard.querySelector("#privacy-link-2").addEventListener("click", function(){ state.showPrivacy=true; render(); });
 
+    wrap.appendChild(renderPurchaseHistoryCard(
+      state.myPurchaseHistory, state.myPurchaseHistoryLoading,
+      function(){ loadMyPurchaseHistory(); }
+    ));
+
     return wrap;
+  }
+
+  function renderPurchaseHistoryCard(list, loading, ensureLoaded){
+    var card = el('<div class="card"></div>');
+    card.appendChild(el('<h2 style="font-size:14.5px">Cronologia acquisti</h2>'));
+    if(list === null && !loading){ ensureLoaded(); }
+    if(loading){
+      card.appendChild(el('<div class="loading-row"><div class="spinner"></div></div>'));
+      return card;
+    }
+    var rows = list || [];
+    if(rows.length===0){
+      card.appendChild(el('<div class="empty-note">Nessun acquisto registrato.</div>'));
+      return card;
+    }
+    rows.forEach(function(h){
+      var d = new Date(h.created_at);
+      var dateLabel = h.payment_date ? fmtDateShort(h.payment_date) : String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+d.getFullYear();
+      card.appendChild(el(
+        '<div class="list-item"><div class="imain">'+
+          '<div class="ititle">'+esc(h.pkg_name)+'</div>'+
+          '<div class="isub">'+dateLabel+' · +'+h.lessons_added+' lezion'+(h.lessons_added===1?"e":"i")+' · totale dopo: '+h.total_after+'</div>'+
+        '</div></div>'
+      ));
+    });
+    return card;
+  }
+
+  async function loadMyPurchaseHistory(){
+    state.myPurchaseHistoryLoading = true; render();
+    try { state.myPurchaseHistory = await rpc("app_client_purchase_history", { p_token: state.clientToken }); }
+    catch(e){ state.myPurchaseHistory = []; }
+    state.myPurchaseHistoryLoading = false;
+    render();
   }
 
   async function setPhotoConsent(val){
@@ -1140,15 +1183,33 @@
         badges.appendChild(el('<span class="badge '+consentBadgeClass+'">'+consentLabel+'</span>'));
         if(!c.has_pin) badges.appendChild(el('<span class="badge badge-warn">PIN non impostato</span>'));
         row.appendChild(badges);
-        var actions = el('<div class="iactions"><button class="btn btn-line btn-sm" data-act="renew">Rinnova</button><button class="btn btn-line btn-sm" data-act="edit">Modifica</button></div>');
+        var historyOpen = state.viewingHistoryClientId===c.id;
+        var actions = el('<div class="iactions"><button class="btn btn-line btn-sm" data-act="renew">Rinnova</button><button class="btn btn-line btn-sm" data-act="history">'+(historyOpen?"Chiudi storico":"Storico acquisti")+'</button><button class="btn btn-line btn-sm" data-act="edit">Modifica</button></div>');
         actions.querySelector('[data-act="renew"]').addEventListener("click", function(){ state.renewingClientId=c.id; render(); });
+        actions.querySelector('[data-act="history"]').addEventListener("click", function(){ state.viewingHistoryClientId = historyOpen ? null : c.id; render(); });
         actions.querySelector('[data-act="edit"]').addEventListener("click", function(){ state.editingClientId=c.id; render(); });
         row.appendChild(actions);
         listCard.appendChild(row);
+
+        if(historyOpen){
+          listCard.appendChild(renderPurchaseHistoryCard(
+            state.adminHistoryCache[c.id] !== undefined ? state.adminHistoryCache[c.id] : null,
+            state.adminHistoryLoading,
+            function(){ loadAdminClientHistory(c.id); }
+          ));
+        }
       });
     }
     wrap.appendChild(listCard);
     return wrap;
+  }
+
+  async function loadAdminClientHistory(clientId){
+    state.adminHistoryLoading = true; render();
+    try { state.adminHistoryCache[clientId] = await rpc("app_admin_client_purchase_history", { p_token: state.adminToken, p_client_id: clientId }); }
+    catch(e){ state.adminHistoryCache[clientId] = []; }
+    state.adminHistoryLoading = false;
+    render();
   }
 
   function renderClientRenewRow(c){
