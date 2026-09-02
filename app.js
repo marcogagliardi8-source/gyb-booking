@@ -541,7 +541,7 @@
     var top = el('<div class="slot-top"></div>');
     top.appendChild(el(
       '<div class="slot-info"><div class="slot-time">'+esc(timeLabel)+'</div>'+
-      '<div class="slot-name">'+esc(ACTIVITY_SHORT).toUpperCase()+'</div></div>'
+      '<div class="slot-name">'+esc(row.activity || ACTIVITY_SHORT).toUpperCase()+'</div></div>'
     ));
 
     var side = el('<div class="slot-side"></div>');
@@ -634,7 +634,7 @@
         var d = new Date(b.booking_date+"T00:00:00");
         var row = el(
           '<div class="booking-row"><div class="bmain"><div class="bname">'+esc(fmtDayLabel(d))+'</div>'+
-          '<div class="bmeta">'+esc(b.time)+' · '+ACTIVITY_SHORT+'</div></div></div>'
+          '<div class="bmeta">'+esc(b.time)+' · '+esc(b.activity || ACTIVITY_SHORT)+'</div></div></div>'
         );
         var cancel = el('<button class="btn btn-line btn-sm" '+(state.busy?"disabled":"")+'>Cancella</button>');
         cancel.addEventListener("click", async function(){
@@ -885,12 +885,13 @@
       '<div class="section-head"><h2>Orari settimanali</h2>'+
       '<button class="btn btn-ghost btn-sm" id="toggle-add-class">'+(state.showAddClass?"Chiudi":"+ Aggiungi orario")+'</button></div>'
     ));
-    card.appendChild(el('<div class="hint" style="margin-top:-6px">L\'attività è sempre '+ACTIVITY_SHORT.toLowerCase()+': qui decidi solo in quali giorni, a che ora e con quanti posti si può prenotare.</div>'));
+    card.appendChild(el('<div class="hint" style="margin-top:-6px">Scegli il nome dell\'attività (es. "Yoga", "Pilates") oppure lascialo su "'+ACTIVITY_SHORT+'": comparirà così nel calendario del cliente.</div>'));
     card.querySelector("#toggle-add-class").addEventListener("click", function(){ state.showAddClass=!state.showAddClass; render(); });
 
     if(state.showAddClass){
       var form = el(
         '<form class="toggle-form">'+
+          '<div class="field"><label>Attività</label><input type="text" id="nc-activity" value="'+ACTIVITY_SHORT+'" placeholder="Es. Yoga" required></div>'+
           '<div class="field">'+
             '<label>Tipo di orario</label>'+
             '<div style="display:flex;gap:8px">'+
@@ -942,6 +943,7 @@
         var endTime = form.querySelector("#nc-end").value || null;
         if(endTime && endTime <= time){ alert("L'orario di fine deve essere dopo l'orario di inizio."); return; }
         var capacity = parseInt(form.querySelector("#nc-cap").value,10);
+        var activity = form.querySelector("#nc-activity").value.trim();
         var mode = form.getAttribute("data-mode");
         try {
           if(mode==="recurring"){
@@ -950,13 +952,13 @@
             var from = form.querySelector("#nc-from").value || null;
             var to = form.querySelector("#nc-to").value || null;
             for(var i=0;i<days.length;i++){
-              await rpc("app_admin_add_class", { p_token: state.adminToken, p_day: days[i], p_time: time, p_end_time: endTime, p_capacity: capacity, p_valid_from: from, p_valid_to: to });
+              await rpc("app_admin_add_class", { p_token: state.adminToken, p_day: days[i], p_time: time, p_end_time: endTime, p_capacity: capacity, p_valid_from: from, p_valid_to: to, p_activity: activity });
             }
           } else {
             var dateVal = form.querySelector("#nc-date").value;
             if(!dateVal){ alert("Scegli una data."); return; }
             var dayIdx = (new Date(dateVal+"T00:00:00").getDay()+6)%7;
-            await rpc("app_admin_add_class", { p_token: state.adminToken, p_day: dayIdx, p_time: time, p_end_time: endTime, p_capacity: capacity, p_valid_from: dateVal, p_valid_to: dateVal });
+            await rpc("app_admin_add_class", { p_token: state.adminToken, p_day: dayIdx, p_time: time, p_end_time: endTime, p_capacity: capacity, p_valid_from: dateVal, p_valid_to: dateVal, p_activity: activity });
           }
           state.adminClasses = null;
           state.showAddClass = false;
@@ -987,7 +989,7 @@
           var timeRangeLabel = cls.end_time ? esc(cls.time)+' – '+esc(cls.end_time) : esc(cls.time);
           var row = el(
             '<div class="list-item">'+
-              '<div class="imain"><div class="ititle">'+DAY_NAMES[cls.day]+' · '+timeRangeLabel+'</div>'+
+              '<div class="imain"><div class="ititle">'+esc(cls.activity||ACTIVITY_SHORT)+' · '+DAY_NAMES[cls.day]+' · '+timeRangeLabel+'</div>'+
               '<div class="isub">Massimo '+cls.capacity+' partecipanti · '+validityNote+'</div></div>'+
               '<div class="iactions"><button class="btn btn-line btn-sm" data-act="edit">Modifica</button><button class="btn btn-danger btn-sm" data-act="del">Elimina</button></div>'+
             '</div>'
@@ -1012,6 +1014,7 @@
     var row = el('<div class="inline-edit-row"></div>');
     var form = el(
       '<form>'+
+        '<div class="field"><label>Attività</label><input type="text" id="ec-activity" value="'+esc(cls.activity||ACTIVITY_SHORT)+'" placeholder="Es. Yoga" required></div>'+
         '<div class="field-row">'+
           '<div class="field"><label>Giorno</label><select id="ec-day">'+DAY_NAMES.map(function(d,i){return '<option value="'+i+'" '+(i===cls.day?"selected":"")+'>'+d+'</option>';}).join("")+'</select></div>'+
           '<div class="field"><label>Inizio</label><input type="time" id="ec-time" value="'+cls.time+'" required></div>'+
@@ -1041,7 +1044,8 @@
           p_end_time: ecEnd,
           p_capacity: parseInt(form.querySelector("#ec-cap").value,10),
           p_valid_from: form.querySelector("#ec-from").value || null,
-          p_valid_to: form.querySelector("#ec-to").value || null
+          p_valid_to: form.querySelector("#ec-to").value || null,
+          p_activity: form.querySelector("#ec-activity").value.trim()
         });
         state.adminClasses = null;
         state.editingClassId = null;
@@ -1251,7 +1255,7 @@
       var timeLabel = cls.time + (cls.end_time ? " – "+cls.end_time : "");
       var row = el('<div class="cal-cell slot day-slot'+(iso===todayIso?" today-col":"")+(selected?" selected":"")+'"></div>');
       row.appendChild(el('<div class="cal-slot-time">'+esc(timeLabel)+'</div>'));
-      row.appendChild(el('<div class="cal-slot-label">'+esc(ACTIVITY_SHORT)+'</div>'));
+      row.appendChild(el('<div class="cal-slot-label">'+esc(cls.activity || ACTIVITY_SHORT)+'</div>'));
       var chips = el('<div class="cal-chips"></div>');
       bs.slice(0,6).forEach(function(b){ chips.appendChild(el('<span class="cal-chip">'+esc(surname(b.client_name))+'</span>')); });
       if(bs.length>6) chips.appendChild(el('<span class="cal-chip more">+'+(bs.length-6)+'</span>'));
@@ -1328,7 +1332,7 @@
         var selected = state.selectedSlotKey===key;
         var cell = el('<div class="cal-cell slot'+(iso===todayIso?" today-col":"")+(selected?" selected":"")+'"></div>');
         cell.appendChild(el('<div class="cal-slot-time">'+t+'</div>'));
-        cell.appendChild(el('<div class="cal-slot-label">'+ACTIVITY_SHORT+'</div>'));
+        cell.appendChild(el('<div class="cal-slot-label">'+esc(cls.activity || ACTIVITY_SHORT)+'</div>'));
         var chips = el('<div class="cal-chips"></div>');
         bs.slice(0,2).forEach(function(b){ chips.appendChild(el('<span class="cal-chip">'+esc(surname(b.client_name))+'</span>')); });
         if(bs.length>2) chips.appendChild(el('<span class="cal-chip more">+'+(bs.length-2)+'</span>'));
