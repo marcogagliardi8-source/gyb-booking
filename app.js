@@ -980,7 +980,7 @@
           '<div id="recurring-fields">'+
             '<div class="field"><label>Giorni della settimana</label>'+
               '<div style="display:flex;flex-wrap:wrap;gap:6px">'+
-                DAY_NAMES.map(function(d,i){ return '<label style="display:flex;align-items:center;gap:5px;background:var(--bg);border:1.5px solid var(--line);padding:6px 10px;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer"><input type="checkbox" class="nc-day-chk" value="'+i+'" style="margin:0">'+d.slice(0,3)+'</label>'; }).join("")+
+                DAY_NAMES.map(function(d,i){ return '<label class="day-chk-pill"><input type="checkbox" class="nc-day-chk" value="'+i+'">'+d.slice(0,3)+'</label>'; }).join("")+
               '</div>'+
             '</div>'+
             '<div class="field-row">'+
