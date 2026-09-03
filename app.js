@@ -202,7 +202,7 @@
       return;
     }
 
-    if(IS_TRIAL_LIN)){
+    if(IS_TRIAL_LINK){
       root.appendChild(renderTrialTopbar());
       var tcontent = el('<div class="content"></div>');
       tcontent.appendChild(renderTrialApp());
