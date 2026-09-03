@@ -33,6 +33,16 @@
     } catch(e){ return false; }
   })();
 
+  // -----------------------------------------------------------------------
+  // Link "prova gratuita" (es. da mettere nelle Storie Instagram): chi apre
+  // l'app con "?prova=1" vede solo il piccolo flusso di prenotazione prova,
+  // senza login e senza vedere il resto dell'app.
+  // -----------------------------------------------------------------------
+  var IS_TRIAL_LINK = (function(){
+    try { return new URLSearchParams(window.location.search).get("prova") === "1"; }
+    catch(e){ return false; }
+  })();
+
   /** Chiama una funzione RPC di Supabase. Lancia un errore con messaggio leggibile. */
   async function rpc(fn, params) {
     var res = await supabaseClient.rpc(fn, params || {});
@@ -144,6 +154,14 @@
     adminLoginError: "",
     adminLoginBusy: false,
 
+    trialStep: "form",
+    trialName: "", trialEmail: "", trialPhone: "",
+    trialFormError: "",
+    trialSelectedDate: null,
+    trialSchedule: null, trialScheduleLoading: false, trialScheduleError: "",
+    trialBusy: false, trialBookError: "",
+    trialResult: null,
+
     showAddClass: false,
     showAddClient: false,
     editingClassId: null,
@@ -181,6 +199,14 @@
           '<p style="font-size:13.5px;color:var(--ink-soft)">Apri il file <code>config.js</code> e inserisci l\'indirizzo (URL) e la chiave "anon" del tuo progetto Supabase, poi ricarica questa pagina. Trovi le istruzioni in DEPLOY.md.</p></div>'+
         '</div>'
       ));
+      return;
+    }
+
+    if(IS_TRIAL_LIN)){
+      root.appendChild(renderTrialTopbar());
+      var tcontent = el('<div class="content"></div>');
+      tcontent.appendChild(renderTrialApp());
+      root.appendChild(tcontent);
       return;
     }
 
@@ -240,6 +266,215 @@
     }
     state.adminChecking = false;
     render();
+  }
+
+  // -----------------------------------------------------------------------
+  // PROVA GRATUITA (link pubblico da Instagram, "?prova=1")
+  // -----------------------------------------------------------------------
+  function renderTrialTopbar(){
+    var bar = el('<div class="topbar"></div>');
+    var row = el(
+      '<div class="brand-row">'+
+        '<div class="brand">'+
+          '<img src="assets/logo-color.png" alt="Get Your Balance Wellness Academy" class="logo-light">'+
+          '<img src="assets/logo-white.png" alt="Get Your Balance Wellness Academy" class="logo-dark" style="display:none">'+
+          '<span class="brand-name">Get Your Balance</span>'+
+        '</div>'+
+      '</div>'
+    );
+    bar.appendChild(row);
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    var dark = document.documentElement.getAttribute("data-theme")==="dark" || (mq.matches && document.documentElement.getAttribute("data-theme")!=="light");
+    if(dark){ row.querySelector(".logo-light").style.display="none"; row.querySelector(".logo-dark").style.display="block"; }
+    return bar;
+  }
+
+  function trialDates(){
+    var days = [];
+    var today = new Date(); today.setHours(0,0,0,0);
+    for(var i=0;i<14;i++) days.push(addDays(today,i));
+    return days;
+  }
+
+  function renderTrialApp(){
+    var wrap = el('<div style="display:flex;flex-direction:column;gap:18px"></div>');
+    wrap.appendChild(el(
+      state.trialStep==="done"
+        ? '<div class="login-hero"><h1 class="display">Ci vediamo in palestra!</h1><p>La tua prova gratuita è confermata.</p></div>'
+        : '<div class="login-hero"><h1 class="display">Prenota la tua prova gratuita</h1><p>Scegli giorno e orario: niente account, niente PIN.</p></div>'
+    ));
+    if(state.trialStep==="form") wrap.appendChild(renderTrialForm());
+    else if(state.trialStep==="picking") wrap.appendChild(renderTrialPicking());
+    else wrap.appendChild(renderTrialDone());
+    return wrap;
+  }
+
+  function renderTrialForm(){
+    var card = el('<div class="card"></div>');
+    if(state.trialFormError) card.appendChild(el('<div class="error-msg">'+esc(state.trialFormError)+'</div>'));
+    var form = el(
+      '<form>'+
+        '<div class="field"><label>Nome e cognome</label><input type="text" id="trial-name" placeholder="Mario Rossi" autocomplete="name" required></div>'+
+        '<div class="field"><label>Email</label><input type="email" id="trial-email" placeholder="nome.cognome@email.it" autocomplete="email" required></div>'+
+        '<div class="field"><label>Telefono (facoltativo)</label><input type="tel" id="trial-phone" placeholder="333 1234567" autocomplete="tel"></div>'+
+        '<button type="submit" class="btn btn-primary btn-block">Continua e scegli il turno</button>'+
+      '</form>'
+    );
+    form.querySelector("#trial-name").value = state.trialName;
+    form.querySelector("#trial-email").value = state.trialEmail;
+    form.querySelector("#trial-phone").value = state.trialPhone;
+    form.addEventListener("submit", function(ev){
+      ev.preventDefault();
+      var name = form.querySelector("#trial-name").value.trim();
+      var email = form.querySelector("#trial-email").value.trim();
+      var phone = form.querySelector("#trial-phone").value.trim();
+      if(name.split(/\s+/).filter(Boolean).length < 2){
+        state.trialFormError = "Inserisci nome e cognome."; render(); return;
+      }
+      if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){
+        state.trialFormError = "Inserisci un indirizzo email valido."; render(); return;
+      }
+      state.trialName = name; state.trialEmail = email; state.trialPhone = phone;
+      state.trialFormError = ""; state.trialStep = "picking";
+      render();
+    });
+    card.appendChild(form);
+    return card;
+  }
+
+  async function loadTrialSchedule(){
+    state.trialScheduleLoading = true; state.trialScheduleError = ""; render();
+    try {
+      var rows = await rpc("app_public_trial_schedule", { p_week_start: todayISO() });
+      state.trialSchedule = rows;
+    } catch(e){
+      state.trialScheduleError = "Non riesco a caricare il calendario. Controlla la connessione e riprova.";
+    }
+    state.trialScheduleLoading = false;
+    render();
+  }
+
+  function renderTrialPicking(){
+    var wrap = el('<div style="display:flex;flex-direction:column;gap:14px"></div>');
+
+    var back = el('<button type="button" class="btn btn-line btn-sm" style="align-self:flex-start">‹ Modifica i tuoi dati</button>');
+    back.addEventListener("click", function(){ state.trialStep="form"; state.trialBookError=""; render(); });
+    wrap.appendChild(back);
+
+    if(state.trialBookError) wrap.appendChild(el('<div class="error-banner">'+esc(state.trialBookError)+'</div>'));
+
+    var days = trialDates();
+    var todayIso = todayISO();
+    if(!state.trialSelectedDate) state.trialSelectedDate = todayIso;
+
+    var strip = el('<div class="day-strip"></div>');
+    days.forEach(function(d){
+      var iso = toISODate(d);
+      var isSel = iso===state.trialSelectedDate;
+      var isToday = iso===todayIso;
+      var item = el(
+        '<button type="button" class="ds-day'+(isSel?" selected":"")+(isToday?" is-today":"")+'">'+
+          '<span class="ds-wd">'+DAY_NAMES_SHORT[(d.getDay()+6)%7].toLowerCase()+'</span>'+
+          '<span class="ds-num">'+d.getDate()+'</span>'+
+        '</button>'
+      );
+      item.addEventListener("click", function(){ state.trialSelectedDate = iso; render(); });
+      strip.appendChild(item);
+    });
+    var stripWrap = el('<div class="day-strip-wrap"></div>');
+    stripWrap.appendChild(strip);
+    wrap.appendChild(stripWrap);
+
+    if(state.trialSchedule===null && !state.trialScheduleLoading){
+      loadTrialSchedule();
+    }
+    if(state.trialScheduleLoading){
+      wrap.appendChild(el('<div class="loading-row"><div class="spinner"></div></div>'));
+      return wrap;
+    }
+    if(state.trialScheduleError){
+      wrap.appendChild(el('<div class="error-banner">'+esc(state.trialScheduleError)+'</div>'));
+      return wrap;
+    }
+
+    var rows = (state.trialSchedule||[]).filter(function(r){ return r.the_date===state.trialSelectedDate; })
+      .sort(function(a,b){ return a.time.localeCompare(b.time); });
+    var list = el('<div class="day-group"></div>');
+    if(rows.length===0){
+      list.appendChild(el('<div class="empty-note">Nessuna mini-class disponibile questo giorno.</div>'));
+    }
+    rows.forEach(function(row){ list.appendChild(renderTrialClassCard(row)); });
+    wrap.appendChild(list);
+    return wrap;
+  }
+
+  function renderTrialClassCard(row){
+    var full = row.booked_count >= row.capacity;
+    var spotsLeft = Math.max(0, row.capacity - row.booked_count);
+    var timeLabel = String(row.time).replace(":", ".");
+    if(row.end_time) timeLabel += " – " + String(row.end_time).replace(":", ".");
+
+    var card = el('<div class="slot-row"></div>');
+    var top = el('<div class="slot-top"></div>');
+    top.appendChild(el(
+      '<div class="slot-info"><div class="slot-time">'+esc(timeLabel)+'</div>'+
+      '<div class="slot-name">'+esc(row.activity || ACTIVITY_SHORT).toUpperCase()+'</div></div>'
+    ));
+    var side = el('<div class="slot-side"></div>');
+    side.appendChild(el('<div class="slot-count" title="Prenotati">'+row.booked_count+'</div>'));
+    if(full){
+      side.appendChild(el('<div class="slot-btn slot-btn-disabled">–</div>'));
+    } else {
+      var plusBtn = el('<button type="button" class="slot-btn slot-btn-plus" '+(state.trialBusy?"disabled":"")+' title="Prenota">+</button>');
+      plusBtn.addEventListener("click", function(){ bookTrial(row); });
+      side.appendChild(plusBtn);
+    }
+    top.appendChild(side);
+    card.appendChild(top);
+
+    var bottom = el('<div class="slot-bottom"></div>');
+    var tagHtml = full ? '<span class="slot-tag tag-completo">Al completo</span>'
+      : '<span class="slot-tag tag-incluso">'+spotsLeft+' post'+(spotsLeft===1?"o":"i")+' liber'+(spotsLeft===1?"o":"i")+'</span>';
+    bottom.appendChild(el('<div>'+tagHtml+'</div>'));
+    card.appendChild(bottom);
+    return card;
+  }
+
+  async function bookTrial(row){
+    state.trialBusy = true; state.trialBookError = ""; render();
+    try {
+      var res = await rpc("app_public_book_trial", {
+        p_name: state.trialName, p_email: state.trialEmail, p_phone: state.trialPhone,
+        p_class_id: row.class_id, p_date: state.trialSelectedDate
+      });
+      state.trialResult = res;
+      state.trialStep = "done";
+    } catch(e){
+      state.trialBookError = e.message || "Non è stato possibile completare la prenotazione. Riprova.";
+    }
+    state.trialBusy = false;
+    render();
+  }
+
+  function renderTrialDone(){
+    var card = el('<div class="card"></div>');
+    var r = state.trialResult || {};
+    var dd = r.date ? new Date(r.date+"T00:00:00") : null;
+    card.appendChild(el(
+      '<div class="banner" style="background:var(--good-bg);border-color:transparent"><span>✅</span>'+
+      '<div><strong>Prenotazione confermata!</strong></div></div>'
+    ));
+    card.appendChild(el(
+      '<div style="margin-top:14px;font-size:15px;line-height:1.6">'+
+      (dd ? '<div><strong>Giorno:</strong> '+esc(fmtDayLabel(dd))+'</div>' : '')+
+      (r.time ? '<div><strong>Orario:</strong> '+esc(String(r.time).replace(":","."))+'</div>' : '')+
+      '<div><strong>Attività:</strong> '+esc(r.activity || ACTIVITY_SHORT)+'</div>'+
+      '</div>'
+    ));
+    card.appendChild(el(
+      '<div class="hint" style="margin-top:14px">Ti abbiamo inviato una conferma via email. Ti aspettiamo in palestra qualche minuto prima dell\'inizio — puoi chiudere questa pagina.</div>'
+    ));
+    return card;
   }
 
   // -----------------------------------------------------------------------
@@ -1213,6 +1448,7 @@
           '<div class="isub">'+esc(c.email)+(c.phone?' · '+esc(c.phone):'')+' · '+esc(c.pkg_name)+' · '+c.used+'/'+c.total+' lezioni · ultimo pagamento '+fmtDateShort(c.payment_date)+'</div></div>'
         ));
         var badges = el('<div style="display:flex;gap:6px;flex-wrap:wrap"></div>');
+        if(c.is_trial) badges.appendChild(el('<span class="badge badge-warn">Prova</span>'));
         badges.appendChild(el('<span class="badge '+pkgBadgeClass+'">'+rem+' rimaste</span>'));
         badges.appendChild(el('<span class="badge '+certBadgeClass+'">'+certLabel+'</span>'));
         badges.appendChild(el('<span class="badge '+consentBadgeClass+'">'+consentLabel+'</span>'));
@@ -1475,7 +1711,7 @@
     } else {
       bs.forEach(function(b){
         var row = el(
-          '<div class="list-item"><div class="imain"><div class="ititle" style="font-weight:600">'+esc(b.client_name)+'</div>'+
+          '<div class="list-item"><div class="imain"><div class="ititle" style="font-weight:600">'+esc(b.client_name)+(b.is_trial?' <span class="badge badge-warn">Prova</span>':'')+'</div>'+
           '<div class="isub">'+esc(b.client_email)+'</div></div>'+
           '<div class="iactions"><button class="btn btn-danger btn-sm">Annulla</button></div></div>'
         );
